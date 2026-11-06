@@ -1,39 +1,50 @@
-# Skebob AI API
+# SKEBOB AI API
 
-Server-side chat API for the GitHub Pages frontend. The first chat model uses Cloudflare Workers AI, so no OpenAI API key or paid OpenAI account is needed for this prototype.
+The static frontend is hosted on GitHub Pages. The chat API runs on Cloudflare Workers AI. Supabase is the planned system for user accounts and persistent data.
 
-## Free-tier notes
+## Planned architecture
 
-- Cloudflare Workers AI currently includes 10,000 Neurons per day at no charge on Workers Free.
-- The daily free allocation is limited and shared by all Workers AI usage on the account. When it runs out, chat requests may stop until the daily reset.
-- Cloudflare Workers Free also has request limits. Check the current official pricing and limits before launch.
-- Free tiers and model availability can change. Do not promise unlimited free AI.
+- GitHub Pages: static website.
+- Supabase Auth: sign-in and user sessions (Google is a supported provider).
+- Supabase Postgres: profiles and chat history, protected with Row Level Security (RLS).
+- Cloudflare Worker + Workers AI: server-side AI chat endpoint.
+- Telegram sign-in: a later integration, with server-side verification of Telegram's signed login data.
 
-## Configure and deploy
+Supabase Auth manages identities and sessions. Do not build a parallel password table or store OAuth access tokens in the application database.
 
-1. Open the Cloudflare dashboard and select the account that owns the Worker.
-2. Confirm the Workers Free plan is selected. Do not upgrade to a paid plan for this setup.
-3. In Workers & Pages, create a Worker named `skebob-ai-api`, or deploy this folder using Wrangler from a trusted computer.
-4. The Wrangler config enables the Workers AI binding (`AI`) and an IP-based rate limit.
-5. Deploy the Worker and copy its URL, for example `https://skebob-ai-api.<account-subdomain>.workers.dev`.
-6. In the root `index.html`, set `API_BASE_URL` to that Worker URL and commit the change.
+## Current status
 
-No OpenAI key is required for this first free chat version.
+- The Worker chat endpoint is a prototype and calls Workers AI.
+- supabase/schema.sql is a database foundation only; it has not been applied to a Supabase project.
+- The frontend does not yet have Supabase sign-in wired in.
+- Chat history is not yet saved to Supabase.
+- Google and Telegram sign-in, per-user quotas, media generation, PRO, credits, and payments are not implemented.
 
-## Security included
+## Supabase setup (later step)
 
-- Exact-origin CORS allowlist for the published GitHub Pages site.
-- Per-IP rate limiting: 10 requests per minute.
-- Request size, message length, and conversation length validation.
-- Generic client errors; internal provider details are not returned to visitors.
-- The model is called server-side; the browser never receives provider credentials.
+1. Create a Supabase project on the free plan, subject to its current limits and terms.
+2. Review supabase/schema.sql before applying it in the Supabase SQL Editor.
+3. Configure Google OAuth in Supabase Auth and the Google Cloud project.
+4. Add the Supabase project URL and publishable key to the frontend only after RLS policies are reviewed and tested.
+5. Implement and test sign-in, profile creation, and chat-history access before enabling these features publicly.
 
-## Database foundation
+Do not put a Supabase secret/service-role key, OAuth client secret, or Telegram bot token in index.html, a public repository, or any browser code. Never share those secrets in chat.
 
-`schema.sql` contains a starter Cloudflare D1 schema for users, Google/Telegram identity links, hashed sessions, conversations, and messages. It intentionally stores provider subject IDs rather than OAuth access tokens. The schema is only a foundation: the authentication routes and session validation still need to be implemented and reviewed before enabling sign-in.
+## Cloudflare Worker
 
-To use it later, create a D1 database in the Cloudflare dashboard and apply `schema.sql` using the D1 console or Wrangler. Then add the database binding and its real database ID to `wrangler.toml`. Do not guess or commit account credentials.
+1. Select the Cloudflare Workers Free plan; do not upgrade for this prototype.
+2. Deploy this folder as skebob-ai-api.
+3. The Worker AI binding is configured in wrangler.toml.
+4. Set API_BASE_URL in the root index.html to the deployed Worker URL.
+5. Recheck Cloudflare's current model availability and free usage limits before launch.
 
-## Not implemented yet
+The free tiers have quotas and may change. Do not promise unlimited AI or zero operating cost at every usage level. No OpenAI API key is needed for this prototype.
 
-Google/Telegram sign-in, persistent chat-history API, user-level quotas, paid media generation, PRO, credits, and payments are not implemented yet. Do not enable paid media generation or payments until those systems are implemented and tested.
+## Security notes
+
+- The Worker checks the published site's exact Origin and validates request size and message structure.
+- The browser must never receive provider secrets.
+- Supabase RLS must remain enabled for every exposed table. Policies and grants must be tested; RLS is not a substitute for careful server-side validation.
+- Add robust abuse controls and authenticated per-user quotas before public launch. The current chat prototype is not production-ready.
+- Chat history can contain personal information. Tell users what is stored and provide a deletion path before enabling persistence.
+- Payment verification and paid features are a separate later phase. Never grant credits based only on a browser redirect.
