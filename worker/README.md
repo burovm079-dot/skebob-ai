@@ -28,6 +28,12 @@ No OpenAI key is required for this first free chat version.
 - Generic client errors; internal provider details are not returned to visitors.
 - The model is called server-side; the browser never receives provider credentials.
 
+## Database foundation
+
+`schema.sql` contains a starter Cloudflare D1 schema for users, Google/Telegram identity links, hashed sessions, conversations, and messages. It intentionally stores provider subject IDs rather than OAuth access tokens. The schema is only a foundation: the authentication routes and session validation still need to be implemented and reviewed before enabling sign-in.
+
+To use it later, create a D1 database in the Cloudflare dashboard and apply `schema.sql` using the D1 console or Wrangler. Then add the database binding and its real database ID to `wrangler.toml`. Do not guess or commit account credentials.
+
 ## Not implemented yet
 
-User accounts, Google/Telegram sign-in, persistent chat history, user-level quotas, paid media generation, PRO, credits, and payments are not implemented yet. Add authentication before storing personal chat history or introducing account-specific balances. Do not enable paid media generation or payments until those systems are implemented and tested.
+Google/Telegram sign-in, persistent chat-history API, user-level quotas, paid media generation, PRO, credits, and payments are not implemented yet. Do not enable paid media generation or payments until those systems are implemented and tested.
