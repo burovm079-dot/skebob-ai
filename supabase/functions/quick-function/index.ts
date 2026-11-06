@@ -58,6 +58,46 @@ async function supabaseRequest(path: string, init: RequestInit = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+
+async function verifyTelegramMiniAppData(initData, botToken) {
+  if (typeof initData !== "string" || initData.length < 1 || initData.length > 8192) {
+    throw new Error("Invalid Telegram Mini App data.");
+  }
+  const params = new URLSearchParams(initData);
+  const receivedHash = params.get("hash");
+  const authDate = Number(params.get("auth_date"));
+  if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash) ||
+      !Number.isInteger(authDate) || authDate > Math.floor(Date.now() / 1000) + 60 ||
+      Math.floor(Date.now() / 1000) - authDate > 86400) {
+    throw new Error("Telegram Mini App authorization data is missing or expired.");
+  }
+  const entries = [...params.entries()]
+    .filter(([key]) => key !== "hash" && key !== "signature")
+    .sort(([a], [b]) => a.localeCompare(b));
+  const dataCheckString = entries.map(([key, value]) => `${key}=${value}`).join("\n");
+  const encoder = new TextEncoder();
+  const tokenKey = await crypto.subtle.importKey(
+    "raw", encoder.encode(botToken), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const secretKey = await crypto.subtle.sign("HMAC", tokenKey, encoder.encode("WebAppData"));
+  const validationKey = await crypto.subtle.importKey(
+    "raw", secretKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const calculated = new Uint8Array(await crypto.subtle.sign("HMAC", validationKey, encoder.encode(dataCheckString)));
+  const calculatedHex = Array.from(calculated, byte => byte.toString(16).padStart(2, "0")).join("");
+  if (calculatedHex.length !== receivedHash.length) throw new Error("Telegram signature is invalid.");
+  let diff = 0;
+  for (let i = 0; i < calculatedHex.length; i++) diff |= calculatedHex.charCodeAt(i) ^ receivedHash.toLowerCase().charCodeAt(i);
+  if (diff !== 0) throw new Error("Telegram signature is invalid.");
+  const rawUser = params.get("user");
+  if (!rawUser) throw new Error("Telegram user data is missing.");
+  const user = JSON.parse(rawUser);
+  if (!user || !Number.isSafeInteger(user.id) || user.id <= 0 || user.is_bot === true) {
+    throw new Error("Telegram user data is invalid.");
+  }
+  return user;
+}
+
 async function createSession(userId: string) {
   const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
   const sessionToken = base64Url(tokenBytes);
@@ -105,6 +145,43 @@ Deno.serve(async (request: Request) => {
   try {
     const body = await request.json();
     const action = body?.action || "login";
+
+    if (action === "miniapp-login") {
+      const botToken = requiredEnv("TELEGRAM_BOT_TOKEN");
+      let telegramUser: Record<string, unknown>;
+      try {
+        telegramUser = await verifyTelegramMiniAppData(body.init_data, botToken);
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "Telegram authorization failed." }, 401);
+      }
+      const telegramId = String(telegramUser.id);
+      const username = typeof telegramUser.username === "string" ? telegramUser.username.slice(0, 64) : null;
+      const firstName = typeof telegramUser.first_name === "string" ? telegramUser.first_name : "";
+      const lastName = typeof telegramUser.last_name === "string" ? telegramUser.last_name : "";
+      const displayName = [firstName, lastName].filter(Boolean).join(" ").slice(0, 160) || username || null;
+      const avatarUrl = typeof telegramUser.photo_url === "string" && telegramUser.photo_url.startsWith("https://")
+        ? telegramUser.photo_url.slice(0, 2048)
+        : null;
+      const profiles = await supabaseRequest(
+        "app_users?on_conflict=telegram_user_id&select=id,telegram_user_id,telegram_username,display_name,avatar_url",
+        {
+          method: "POST",
+          headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+          body: JSON.stringify({
+            telegram_user_id: telegramId,
+            telegram_username: username,
+            display_name: displayName,
+            avatar_url: avatarUrl,
+            updated_at: new Date().toISOString(),
+          }),
+        },
+      );
+      if (!Array.isArray(profiles) || profiles.length !== 1 || typeof profiles[0].id !== "string") {
+        throw new Error("Could not create the account profile.");
+      }
+      const session = await createSession(profiles[0].id);
+      return json({ authenticated: true, session_token: session.sessionToken, expires_at: session.expiresAt, user: profiles[0] });
+    }
 
     if (action === "session") {
       const session = await getSession(body.session_token);
