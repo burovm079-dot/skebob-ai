@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d12">
+  <title>Вход — SKEBOB AI</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d12;color:#f4f6fb;font:16px system-ui,sans-serif}
+    main{width:min(440px,calc(100% - 40px));padding:28px;border:1px solid #292e3b;border-radius:18px;background:#141822}
+    h1{font-size:23px;margin:0 0 12px}p{color:#aeb5c5;line-height:1.6}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SKEBOB AI</h1>
+    <p id="status">Проверяем ответ Telegram…</p>
+  </main>
+  <script>
+    const SUPABASE_FUNCTION_URL = "https://krhjrhuejzhpaeukdimu.supabase.co/functions/v1/quick-function";
+    const SUPABASE_ANON_KEY = "sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP";
+
+    async function finishLogin() {
+      const status = document.querySelector("#status");
+      const params = new URLSearchParams(location.search);
+      const code = params.get("code");
+      const returnedState = params.get("state");
+
+      if (params.has("error")) throw new Error("Telegram не завершил вход.");
+      const expectedState = sessionStorage.getItem("skebob_oidc_state");
+      const verifier = sessionStorage.getItem("skebob_oidc_verifier");
+      const nonce = sessionStorage.getItem("skebob_oidc_nonce");
+
+      if (!code || !returnedState || !expectedState || returnedState !== expectedState ||
+          !verifier || !nonce) {
+        throw new Error("Проверка входа не пройдена. Вернись на сайт и начни авторизацию заново.");
+      }
+
+      const response = await fetch(SUPABASE_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ action: "login", code, code_verifier: verifier, nonce })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.authenticated !== true ||
+          typeof data.session_token !== "string" || !data.user) {
+        throw new Error(data.error || "Не удалось создать сессию. Попробуй войти ещё раз.");
+      }
+
+      sessionStorage.setItem("skebob_session_token", data.session_token);
+      sessionStorage.setItem("skebob_user", JSON.stringify(data.user));
+      sessionStorage.removeItem("skebob_oidc_state");
+      sessionStorage.removeItem("skebob_oidc_verifier");
+      sessionStorage.removeItem("skebob_oidc_nonce");
+      status.textContent = "Вход выполнен! Возвращаемся на сайт…";
+      history.replaceState({}, document.title, location.pathname);
+      location.replace("/");
+    }
+
+    finishLogin().catch((error) => {
+      document.querySelector("#status").textContent =
+        error instanceof Error ? error.message : "Ошибка входа.";
+    });
+  </script>
+</body>
+</html>
