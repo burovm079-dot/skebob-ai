@@ -18,7 +18,6 @@
   </main>
   <script>
     const SUPABASE_FUNCTION_URL = "https://krhjrhuejzhpaeukdimu.supabase.co/functions/v1/quick-function";
-    // This must be the project's public anon/publishable key, never a service_role/secret key.
     const SUPABASE_ANON_KEY = "sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP";
 
     async function finishLogin() {
@@ -36,9 +35,6 @@
           !verifier || !nonce) {
         throw new Error("Проверка входа не пройдена. Вернись на сайт и начни авторизацию заново.");
       }
-      if (SUPABASE_ANON_KEY.startsWith("REPLACE_")) {
-        throw new Error("Нужно настроить публичный ключ Supabase на сайте.");
-      }
 
       const response = await fetch(SUPABASE_FUNCTION_URL, {
         method: "POST",
@@ -47,22 +43,27 @@
           "apikey": SUPABASE_ANON_KEY,
           "Authorization": "Bearer " + SUPABASE_ANON_KEY
         },
-        body: JSON.stringify({ code, code_verifier: verifier, nonce })
+        body: JSON.stringify({ action: "login", code, code_verifier: verifier, nonce })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.authenticated !== true) {
-        throw new Error(data.error || "Telegram не удалось подтвердить.");
+      if (!response.ok || data.authenticated !== true ||
+          typeof data.session_token !== "string" || !data.user) {
+        throw new Error(data.error || "Не удалось создать сессию. Попробуй войти ещё раз.");
       }
 
+      sessionStorage.setItem("skebob_session_token", data.session_token);
+      sessionStorage.setItem("skebob_user", JSON.stringify(data.user));
       sessionStorage.removeItem("skebob_oidc_state");
       sessionStorage.removeItem("skebob_oidc_verifier");
       sessionStorage.removeItem("skebob_oidc_nonce");
-      status.textContent = "Telegram успешно подтвердил личность. Постоянная сессия SKEBOB AI будет добавлена следующим этапом.";
+      status.textContent = "Вход выполнен! Возвращаемся на сайт…";
       history.replaceState({}, document.title, location.pathname);
+      location.replace("/");
     }
 
     finishLogin().catch((error) => {
-      document.querySelector("#status").textContent = error instanceof Error ? error.message : "Ошибка входа.";
+      document.querySelector("#status").textContent =
+        error instanceof Error ? error.message : "Ошибка входа.";
     });
   </script>
 </body>
