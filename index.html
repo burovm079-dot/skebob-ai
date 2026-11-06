@@ -78,7 +78,10 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP';
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/skebob-ai/auth/callback/';
-  // AI backend will be connected in the next development step.
+  // Local AI: the model runs in the visitor's browser via WebLLM. No paid API key is used.
+  const WEBLLM_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC';
+  let aiEngine = null;
+  let aiEnginePromise = null;
   const promptBox = document.querySelector('#prompt');
   const conversation = document.querySelector('#conversation');
   const welcome = document.querySelector('#welcome');
@@ -206,6 +209,33 @@
     row.append(avatar, bubble);
     conversation.append(row);
     row.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return bubble;
+  }
+
+  async function getAIEngine(statusBubble) {
+    if (aiEngine) return aiEngine;
+    if (aiEnginePromise) return aiEnginePromise;
+    if (!('gpu' in navigator)) {
+      throw new Error('В этом браузере нет WebGPU. Попробуй обновлённый Chrome или Edge на устройстве с поддерживаемой графикой.');
+    }
+    aiEnginePromise = (async () => {
+      statusBubble.textContent = 'Загружаю движок Skebob AI…';
+      const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+      const engine = await webllm.CreateMLCEngine(WEBLLM_MODEL_ID, {
+        initProgressCallback: (report) => {
+          const text = typeof report?.text === 'string' ? report.text : 'Подготавливаю локальную модель…';
+          statusBubble.textContent = text;
+        }
+      });
+      aiEngine = engine;
+      return engine;
+    })();
+    try {
+      return await aiEnginePromise;
+    } catch (error) {
+      aiEnginePromise = null;
+      throw error;
+    }
   }
 
   async function send(text = promptBox.value.trim()) {
@@ -221,34 +251,33 @@
       addMessage('Сначала войди через Telegram, чтобы пользоваться AI-чатом.', 'assistant');
       return;
     }
-    addMessage('AI-чат пока подключается. Вход через Telegram уже готов — скоро добавим ответы модели.', 'assistant');
-    return;
 
-    history.push({ role: 'user', content: text });
     sending = true;
     const sendButton = document.querySelector('#send');
     sendButton.disabled = true;
     sendButton.textContent = 'Думаю…';
+    const statusBubble = addMessage('Запускаю локальный ИИ. При первом запуске модель нужно загрузить — это может занять некоторое время.', 'assistant');
+    history.push({ role: 'user', content: text });
     try {
-      const response = await fetch(AI_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionToken },
-        body: JSON.stringify({ messages: history.slice(-12) })
+      const engine = await getAIEngine(statusBubble);
+      statusBubble.textContent = 'Готовлю ответ…';
+      const result = await engine.chat.completions.create({
+        messages: [
+          { role: 'system', content: 'Ты — Skebob AI, полезный, дружелюбный и безопасный ИИ-помощник. Отвечай на языке пользователя, обычно по-русски. Объясняй понятно и честно; если не знаешь ответа, скажи об этом.' },
+          ...history.slice(-12)
+        ],
+        temperature: 0.7,
+        max_tokens: 512
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 401) {
-          sessionStorage.removeItem('skebob_session_token');
-          sessionStorage.removeItem('skebob_user');
-          showSignedOut();
-        }
-        throw new Error(data.error || 'Не удалось получить ответ от AI.');
-      }
-      if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('AI вернул пустой ответ. Попробуй ещё раз.');
-      history.push({ role: 'assistant', content: data.reply });
-      addMessage(data.reply, 'assistant');
+      const reply = result?.choices?.[0]?.message?.content;
+      if (typeof reply !== 'string' || !reply.trim()) throw new Error('Модель вернула пустой ответ. Попробуй ещё раз.');
+      history.push({ role: 'assistant', content: reply.trim() });
+      statusBubble.textContent = reply.trim();
     } catch (error) {
-      addMessage(error instanceof Error ? error.message : 'Не удалось связаться с AI-сервером.', 'assistant');
+      statusBubble.textContent = error instanceof Error
+        ? 'Не удалось запустить локальный ИИ: ' + error.message
+        : 'Не удалось запустить локальный ИИ. Попробуй обновить страницу.';
+      history.pop();
     } finally {
       sending = false;
       sendButton.disabled = false;
