@@ -1,27 +1,33 @@
 # Skebob AI API
 
-Server-side chat API for the GitHub Pages frontend. The OpenAI key is stored as a Cloudflare Worker secret and is never sent to the browser.
+Server-side chat API for the GitHub Pages frontend. The first chat model uses Cloudflare Workers AI, so no OpenAI API key or paid OpenAI account is needed for this prototype.
 
-## Before deployment
+## Free-tier notes
 
-A parent or guardian should help manage the hosting account, API account, and any billing. Do not put API keys in GitHub files, browser JavaScript, screenshots, or chat messages.
+- Cloudflare Workers AI currently includes 10,000 Neurons per day at no charge on Workers Free.
+- The daily free allocation is limited and shared by all Workers AI usage on the account. When it runs out, chat requests may stop until the daily reset.
+- Cloudflare Workers Free also has request limits. Check the current official pricing and limits before launch.
+- Free tiers and model availability can change. Do not promise unlimited free AI.
 
 ## Configure and deploy
 
-1. Install Wrangler on a trusted computer and sign in to the Cloudflare account.
-2. From this directory, set the secret:
-   `npx wrangler secret put OPENAI_API_KEY`
-3. Deploy:
-   `npx wrangler deploy`
-4. Copy the Worker URL printed by Wrangler. It will look like `https://skebob-ai-api.<account-subdomain>.workers.dev`.
-5. In the root `index.html`, set `API_BASE_URL` to that Worker URL and commit the change. Do not add the OpenAI key there.
+1. Open the Cloudflare dashboard and select the account that owns the Worker.
+2. Confirm the Workers Free plan is selected. Do not upgrade to a paid plan for this setup.
+3. In Workers & Pages, create a Worker named `skebob-ai-api`, or deploy this folder using Wrangler from a trusted computer.
+4. The Wrangler config enables the Workers AI binding (`AI`) and an IP-based rate limit.
+5. Deploy the Worker and copy its URL, for example `https://skebob-ai-api.<account-subdomain>.workers.dev`.
+6. In the root `index.html`, set `API_BASE_URL` to that Worker URL and commit the change.
+
+No OpenAI key is required for this first free chat version.
 
 ## Security included
 
 - Exact-origin CORS allowlist for the published GitHub Pages site.
-- Cloudflare rate limit: 10 requests per IP per minute.
+- Per-IP rate limiting: 10 requests per minute.
 - Request size, message length, and conversation length validation.
-- Generic client errors; provider details are not returned to visitors.
-- Responses API requests use `store: false`.
+- Generic client errors; internal provider details are not returned to visitors.
+- The model is called server-side; the browser never receives provider credentials.
 
-Before making the site public with a paid API key, review usage limits and billing with the adult managing the account. The initial version does not yet include user accounts, per-user quotas, or billing. Do not enable paid media generation or payments until those systems are implemented and tested.
+## Not implemented yet
+
+User accounts, Google/Telegram sign-in, persistent chat history, user-level quotas, paid media generation, PRO, credits, and payments are not implemented yet. Add authentication before storing personal chat history or introducing account-specific balances. Do not enable paid media generation or payments until those systems are implemented and tested.
