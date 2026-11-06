@@ -72,17 +72,107 @@
   </main>
 </div>
 <script>
-  const promptBox=document.querySelector('#prompt'), conversation=document.querySelector('#conversation'), welcome=document.querySelector('#welcome');
-  function addMessage(text,who){const row=document.createElement('div');row.className='message '+who;const avatar=document.createElement('div');avatar.className='mini-avatar';avatar.textContent=who==='user'?'S':'✳';const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;row.append(avatar,bubble);conversation.append(row);conversation.scrollIntoView({behavior:'smooth',block:'end'});}
-  function send(text=promptBox.value.trim()){if(!text)return;welcome.style.display='none';conversation.style.display='flex';addMessage(text,'user');promptBox.value='';addMessage('Интерфейс Skebob AI готов! Чтобы я мог отвечать на вопросы по-настоящему, подключи AI-модель через серверный API. Сейчас это демонстрационный интерфейс без подключения к модели.','assistant');}
-  document.querySelector('#send').addEventListener('click',()=>send());
-  promptBox.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
-  document.querySelectorAll('[data-prompt]').forEach(b=>b.addEventListener('click',()=>send(b.dataset.prompt)));
-  document.querySelector('#newChat').addEventListener('click',()=>{conversation.innerHTML='';conversation.style.display='none';welcome.style.display='block';promptBox.value='';});
-  document.querySelector('#mode').addEventListener('click',e=>{e.currentTarget.textContent=e.currentTarget.textContent.includes('обычный')?'✧ Режим: рассуждение':'✧ Режим: обычный';});
-  document.querySelector('#attach').addEventListener('click',()=>alert('Загрузка файлов появится после подключения backend.'));
-  document.querySelector('#share').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(location.href);alert('Ссылка скопирована');}catch{alert('Скопируй адрес страницы из браузера.');}});
-  document.querySelector('#prompt').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,170)+'px';});
+  // После публикации Worker укажи здесь его адрес, например:
+  // const API_BASE_URL = 'https://skebob-ai-api.example.workers.dev';
+  const API_BASE_URL = '';
+  const promptBox = document.querySelector('#prompt');
+  const conversation = document.querySelector('#conversation');
+  const welcome = document.querySelector('#welcome');
+  const history = [];
+  let sending = false;
+
+  function addMessage(text, who) {
+    const row = document.createElement('div');
+    row.className = 'message ' + who;
+    const avatar = document.createElement('div');
+    avatar.className = 'mini-avatar';
+    avatar.textContent = who === 'user' ? 'S' : '✳';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    row.append(avatar, bubble);
+    conversation.append(row);
+    row.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  async function send(text = promptBox.value.trim()) {
+    if (!text || sending) return;
+    welcome.style.display = 'none';
+    conversation.style.display = 'flex';
+    addMessage(text, 'user');
+    history.push({ role: 'user', content: text });
+    promptBox.value = '';
+    promptBox.style.height = 'auto';
+
+    if (!API_BASE_URL) {
+      addMessage('Чат уже подготовлен к подключению, но сервер ещё не опубликован. После настройки Cloudflare Worker сюда будет подключена настоящая модель.', 'assistant');
+      history.pop();
+      return;
+    }
+
+    sending = true;
+    const sendButton = document.querySelector('#send');
+    sendButton.disabled = true;
+    sendButton.textContent = 'Думаю…';
+    try {
+      const response = await fetch(API_BASE_URL.replace(/\/$/, '') + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history.slice(-12) })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Не удалось получить ответ от сервера.');
+      if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Сервер вернул пустой ответ.');
+      history.push({ role: 'assistant', content: data.reply });
+      addMessage(data.reply, 'assistant');
+    } catch (error) {
+      history.pop();
+      addMessage(error.message || 'Произошла ошибка. Попробуй ещё раз позже.', 'assistant');
+    } finally {
+      sending = false;
+      sendButton.disabled = false;
+      sendButton.textContent = 'Отправить ↑';
+      promptBox.focus();
+    }
+  }
+
+  document.querySelector('#send').addEventListener('click', () => send());
+  promptBox.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+  document.querySelectorAll('[data-prompt]').forEach(button =>
+    button.addEventListener('click', () => send(button.dataset.prompt))
+  );
+  document.querySelector('#newChat').addEventListener('click', () => {
+    conversation.innerHTML = '';
+    conversation.style.display = 'none';
+    welcome.style.display = 'block';
+    promptBox.value = '';
+    history.length = 0;
+  });
+  document.querySelector('#mode').addEventListener('click', e => {
+    e.currentTarget.textContent = e.currentTarget.textContent.includes('обычный')
+      ? '✧ Режим: рассуждение'
+      : '✧ Режим: обычный';
+  });
+  document.querySelector('#attach').addEventListener('click', () =>
+    alert('Загрузка файлов появится на следующем этапе.')
+  );
+  document.querySelector('#share').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      alert('Ссылка скопирована');
+    } catch {
+      alert('Скопируй адрес страницы из браузера.');
+    }
+  });
+  promptBox.addEventListener('input', e => {
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 170) + 'px';
+  });
 </script>
 </body>
 </html>
