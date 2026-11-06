@@ -29,7 +29,7 @@
     .suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin:27px auto 0;max-width:620px}.suggestion{border:1px solid #282e3c;background:#121620;border-radius:13px;padding:15px;text-align:left;transition:.2s}.suggestion:hover{border-color:#7663b8;transform:translateY(-2px);background:#191d29}.suggestion strong{font-size:12px;display:block;margin-bottom:5px}.suggestion small{color:#858da1;font-size:11px}.suggestion .ico{float:right}
     .conversation{display:none;flex-direction:column;gap:20px;margin-bottom:26px}.message{display:flex;gap:12px;align-items:flex-start}.message.user{flex-direction:row-reverse}.bubble{max-width:78%;padding:14px 17px;border:1px solid var(--line);border-radius:15px;background:#151923;font-size:14px;line-height:1.6;white-space:pre-wrap}.user .bubble{background:#292340;border-color:#4b3d71}.mini-avatar{flex:0 0 30px;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#25203a;color:#c4b4ff;font-size:14px}
     .composer-wrap{position:sticky;bottom:0;margin-top:auto}.composer{border:1px solid #34394a;background:#151923;border-radius:17px;padding:12px 13px 10px;box-shadow:0 15px 50px #0006}.composer:focus-within{border-color:#7765b5;box-shadow:0 0 0 3px #a78bfa14,0 15px 50px #0006}textarea{width:100%;resize:none;min-height:52px;max-height:170px;border:0;outline:0;background:transparent;color:var(--text);padding:5px 6px;font-size:14px;line-height:1.5}textarea::placeholder{color:#737c90}.composer-tools{display:flex;align-items:center;justify-content:space-between;padding:5px 2px 0}.toolset{display:flex;gap:7px}.toolset button{background:transparent;border:0;color:#8d96a9;padding:6px 8px;border-radius:8px;font-size:12px}.toolset button:hover{background:#252a38;color:white}.send{border:0;background:linear-gradient(135deg,#a78bfa,#78d9c7);color:#10131a;border-radius:10px;padding:9px 14px;font-weight:800}.hint{text-align:center;color:#626b7d;font-size:10px;margin:12px 0 0}
-    @media(max-width:700px){.app{grid-template-columns:1fr}aside{display:none}.topbar{padding:0 16px;height:60px}.workspace{width:calc(100% - 28px);padding:55px 0 20px}.suggestions{grid-template-columns:1fr}.bubble{max-width:88%}.top-actions button:first-child{display:none}}
+    @media(max-width:700px){.app{grid-template-columns:1fr}aside{display:none}.topbar{padding:0 16px;height:60px}.workspace{width:calc(100% - 28px);padding:55px 0 20px}.suggestions{grid-template-columns:1fr}.bubble{max-width:88%}.top-actions #share{display:none}}
   </style>
 </head>
 <body>
@@ -47,7 +47,7 @@
       <button>✦ Идеи для нового проекта</button><button>✦ План на неделю</button><button>✦ Помощь с кодом</button>
     </div></div>
     <div class="side-bottom"><div class="nav"><button><span class="ico">⚙</span> Настройки</button><button><span class="ico">◈</span> Помощь и поддержка</button></div>
-      <div class="profile"><div class="avatar">S</div><div>Мой аккаунт<small>Бесплатный план</small></div><span style="margin-left:auto;color:#7d879a">•••</span></div>
+      <div class="profile"><div class="avatar" id="profileAvatar">S</div><div id="profileLabel">Мой аккаунт<small id="profilePlan">Бесплатный план</small></div><button id="logoutButton" hidden style="margin-left:auto;border:0;background:transparent;color:#aeb5c5;font-size:11px">Выйти</button></div>
     </div>
   </aside>
   <main>
@@ -125,7 +125,74 @@
     location.assign(auth.toString());
   }
 
-  document.querySelector('#telegramLogin').addEventListener('click', startTelegramLogin);
+
+  async function authRequest(payload) {
+    const response = await fetch(SUPABASE_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Ошибка проверки аккаунта.');
+    return data;
+  }
+
+  function showSignedOut() {
+    document.querySelector('#profileAvatar').textContent = 'S';
+    document.querySelector('#profileLabel').firstChild.textContent = 'Мой аккаунт';
+    document.querySelector('#profilePlan').textContent = 'Бесплатный план';
+    document.querySelector('#logoutButton').hidden = true;
+    document.querySelector('#telegramLogin').textContent = 'Войти через Telegram';
+  }
+
+  function showSignedIn(user) {
+    const label = user.display_name || (user.telegram_username ? '@' + user.telegram_username : 'Пользователь Telegram');
+    document.querySelector('#profileAvatar').textContent = (label.trim()[0] || 'T').toUpperCase();
+    document.querySelector('#profileLabel').firstChild.textContent = label;
+    document.querySelector('#profilePlan').textContent = 'Вход через Telegram';
+    document.querySelector('#logoutButton').hidden = false;
+    document.querySelector('#telegramLogin').textContent = 'Аккаунт подключён';
+  }
+
+  async function refreshAuthState() {
+    const token = sessionStorage.getItem('skebob_session_token');
+    if (!token) return showSignedOut();
+    try {
+      const data = await authRequest({ action: 'session', session_token: token });
+      if (!data.authenticated || !data.user) throw new Error('Сессия не найдена.');
+      sessionStorage.setItem('skebob_user', JSON.stringify(data.user));
+      showSignedIn(data.user);
+    } catch {
+      sessionStorage.removeItem('skebob_session_token');
+      sessionStorage.removeItem('skebob_user');
+      showSignedOut();
+    }
+  }
+
+  document.querySelector('#telegramLogin').addEventListener('click', () => {
+    if (sessionStorage.getItem('skebob_session_token')) {
+      document.querySelector('#logoutButton').focus();
+      return;
+    }
+    startTelegramLogin();
+  });
+
+  document.querySelector('#logoutButton').addEventListener('click', async () => {
+    const token = sessionStorage.getItem('skebob_session_token');
+    if (token) {
+      try { await authRequest({ action: 'logout', session_token: token }); } catch {}
+    }
+    sessionStorage.removeItem('skebob_session_token');
+    sessionStorage.removeItem('skebob_user');
+    showSignedOut();
+  });
+
+  refreshAuthState();
+
 
   function addMessage(text, who) {
     const row = document.createElement('div');
