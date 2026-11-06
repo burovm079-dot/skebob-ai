@@ -126,7 +126,7 @@ Deno.serve(async (request: Request) => {
     const clientId = requiredEnv("TELEGRAM_CLIENT_ID");
     const clientSecret = requiredEnv("TELEGRAM_CLIENT_SECRET");
     const redirectUri = requiredEnv("TELEGRAM_REDIRECT_URI");
-    if (redirectUri !== "https://burovm079-dot.github.io/auth/callback/") {
+    if (redirectUri !== "https://burovm079-dot.github.io/skebob-ai/auth/callback/") {
       return json({ error: "Telegram redirect URI configuration does not match the website." }, 500);
     }
 
