@@ -57,7 +57,7 @@
       sessionStorage.removeItem("skebob_oidc_nonce");
       status.textContent = "Вход выполнен! Возвращаемся на сайт…";
       history.replaceState({}, document.title, location.pathname);
-      location.replace("/");
+      location.replace("/skebob-ai/");
     }
 
     finishLogin().catch((error) => {
