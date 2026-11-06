@@ -115,13 +115,74 @@
     if (!list) return;
     list.replaceChildren();
     chats.slice().reverse().forEach(chat => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = '✦ ' + (chat.title || 'Новый чат');
-      button.title = chat.title || 'Новый чат';
-      button.classList.toggle('active', chat.id === activeChatId);
-      button.addEventListener('click', () => openChat(chat.id));
-      list.append(button);
+      const item = document.createElement('div');
+      item.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px;';
+      const openButton = document.createElement('button');
+      openButton.type = 'button';
+      openButton.textContent = '✦ ' + (chat.title || 'Новый чат');
+      openButton.title = chat.title || 'Новый чат';
+      openButton.classList.toggle('active', chat.id === activeChatId);
+      openButton.style.cssText = 'min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      openButton.disabled = sending;
+      openButton.addEventListener('click', () => openChat(chat.id));
+
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:1px;';
+      const renameButton = document.createElement('button');
+      renameButton.type = 'button';
+      renameButton.textContent = '✎';
+      renameButton.title = 'Переименовать чат';
+      renameButton.setAttribute('aria-label', 'Переименовать чат');
+      renameButton.style.cssText = 'padding:6px 7px;color:#aeb5c5;background:transparent;border:0;border-radius:6px;';
+      renameButton.disabled = sending;
+      renameButton.addEventListener('click', () => {
+        const nextTitle = prompt('Новое название чата:', chat.title || 'Новый чат');
+        if (nextTitle === null) return;
+        const cleanTitle = nextTitle.trim().replace(/\\s+/g, ' ').slice(0, 48);
+        if (!cleanTitle) {
+          alert('Название не может быть пустым.');
+          return;
+        }
+        chat.title = cleanTitle;
+        saveChat();
+      });
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.textContent = '×';
+      deleteButton.title = 'Удалить чат';
+      deleteButton.setAttribute('aria-label', 'Удалить чат');
+      deleteButton.style.cssText = 'padding:6px 8px;color:#d69a9a;background:transparent;border:0;border-radius:6px;';
+      deleteButton.disabled = sending;
+      deleteButton.addEventListener('click', () => {
+        if (!confirm('Удалить чат «' + (chat.title || 'Новый чат') + '»? Это действие нельзя отменить.')) return;
+        const index = chats.findIndex(entry => entry.id === chat.id);
+        if (index >= 0) chats.splice(index, 1);
+        if (activeChatId === chat.id) {
+          activeChatId = chats.length ? chats[chats.length - 1].id : null;
+          history.length = 0;
+          conversation.replaceChildren();
+          if (activeChatId) {
+            const nextChat = activeChat();
+            history.push(...(nextChat?.messages || []));
+            if (history.length) {
+              welcome.style.display = 'none';
+              conversation.style.display = 'flex';
+              history.forEach(message => addMessage(message.content, message.role));
+            } else {
+              conversation.style.display = 'none';
+              welcome.style.display = 'block';
+            }
+          } else {
+            conversation.style.display = 'none';
+            welcome.style.display = 'block';
+          }
+        }
+        saveChat();
+      });
+      actions.append(renameButton, deleteButton);
+      item.append(openButton, actions);
+      list.append(item);
     });
   }
 
