@@ -7,8 +7,3 @@ ALLOWED_ORIGIN = "https://burovm079-dot.github.io"
 
 [ai]
 binding = "AI"
-
-[[ratelimits]]
-name = "RATE_LIMITER"
-namespace_id = "1001"
-simple = { limit = 10, period = 60 }
