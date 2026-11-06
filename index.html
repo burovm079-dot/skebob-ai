@@ -23,6 +23,7 @@
     .side-bottom{margin-top:auto}.profile{display:flex;align-items:center;gap:10px;padding:13px 8px 2px;border-top:1px solid var(--line);font-size:12px}.avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#293849;color:#9ee5d6;font-weight:700}.profile small{display:block;color:var(--muted);margin-top:2px}
     main{display:flex;flex-direction:column;min-width:0;min-height:100vh}.topbar{height:68px;border-bottom:1px solid #222632;display:flex;align-items:center;justify-content:space-between;padding:0 34px;background:#0d1017a8;backdrop-filter:blur(16px)}
     .model{font-size:13px;color:#d9dced;background:#171b26;border:1px solid var(--line);border-radius:9px;padding:8px 11px}.model b{color:var(--accent2);font-weight:600}.top-actions{display:flex;gap:9px}.top-actions button{border:1px solid var(--line);background:#141822;border-radius:9px;padding:8px 11px;font-size:12px;color:#aeb5c5}
+    .top-actions #telegramLogin{background:#292340;border-color:#6552a0;color:#eee8ff}
     .workspace{width:min(850px,calc(100% - 44px));margin:0 auto;display:flex;flex-direction:column;flex:1;padding:70px 0 28px}.welcome{text-align:center;margin:auto 0 35px}.spark{width:54px;height:54px;border-radius:18px;margin:0 auto 22px;background:linear-gradient(135deg,#a78bfa,#70d6c2);display:grid;place-items:center;color:#10121a;font-size:25px;box-shadow:0 12px 45px #9275dc3b}
     h1{font:600 clamp(30px,5vw,46px)/1.12 'Space Grotesk',sans-serif;letter-spacing:-1.8px;margin:0 0 13px}.gradient{background:linear-gradient(95deg,#c3a9ff,#7ce0cc);-webkit-background-clip:text;background-clip:text;color:transparent}.subtitle{color:#929bad;font-size:14px;margin:0}
     .suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin:27px auto 0;max-width:620px}.suggestion{border:1px solid #282e3c;background:#121620;border-radius:13px;padding:15px;text-align:left;transition:.2s}.suggestion:hover{border-color:#7663b8;transform:translateY(-2px);background:#191d29}.suggestion strong{font-size:12px;display:block;margin-bottom:5px}.suggestion small{color:#858da1;font-size:11px}.suggestion .ico{float:right}
@@ -50,7 +51,7 @@
     </div>
   </aside>
   <main>
-    <header class="topbar"><div class="model">Модель: <b>Skebob AI</b>　⌄</div><div class="top-actions"><button id="share">↗ Поделиться</button><button>Обновить план ✦</button></div></header>
+    <header class="topbar"><div class="model">Модель: <b>Skebob AI</b>　⌄</div><div class="top-actions"><button id="telegramLogin">Войти через Telegram</button><button id="share">↗ Поделиться</button><button>Обновить план ✦</button></div></header>
     <section class="workspace">
       <div class="welcome" id="welcome">
         <div class="spark">✳</div>
@@ -72,14 +73,58 @@
   </main>
 </div>
 <script>
-  // После публикации Worker укажи здесь его адрес, например:
-  // const API_BASE_URL = 'https://skebob-ai-api.example.workers.dev';
+  // Заполним адрес после публикации Cloudflare Worker.
   const API_BASE_URL = '';
+  const TELEGRAM_CLIENT_ID = '9148855115';
+  const REDIRECT_URI = 'https://burovm079-dot.github.io/auth/callback/';
   const promptBox = document.querySelector('#prompt');
   const conversation = document.querySelector('#conversation');
   const welcome = document.querySelector('#welcome');
   const history = [];
   let sending = false;
+
+  function randomBase64Url(length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length));
+    let binary = '';
+    bytes.forEach(byte => binary += String.fromCharCode(byte));
+    return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  }
+
+  async function startTelegramLogin() {
+    if (!API_BASE_URL) {
+      alert('Сервер авторизации ещё не опубликован. Сначала настроим Cloudflare Worker.');
+      return;
+    }
+    const state = randomBase64Url(32);
+    const nonce = randomBase64Url(32);
+    const verifier = randomBase64Url(64);
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    const challenge = randomBase64Url(0) || (() => {
+      const bytes = new Uint8Array(digest);
+      let binary = '';
+      bytes.forEach(byte => binary += String.fromCharCode(byte));
+      return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    })();
+
+    sessionStorage.setItem('skebob_oidc_state', state);
+    sessionStorage.setItem('skebob_oidc_nonce', nonce);
+    sessionStorage.setItem('skebob_oidc_verifier', verifier);
+
+    const auth = new URL('https://oauth.telegram.org/auth');
+    auth.search = new URLSearchParams({
+      client_id: TELEGRAM_CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      response_type: 'code',
+      scope: 'openid profile',
+      state,
+      nonce,
+      code_challenge: challenge,
+      code_challenge_method: 'S256'
+    }).toString();
+    location.assign(auth.toString());
+  }
+
+  document.querySelector('#telegramLogin').addEventListener('click', startTelegramLogin);
 
   function addMessage(text, who) {
     const row = document.createElement('div');
