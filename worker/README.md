@@ -1,24 +1,24 @@
 # SKEBOB AI API
 
-The static frontend is hosted on GitHub Pages. The chat API and Telegram OIDC code exchange run on Cloudflare Workers. Supabase is the planned database for user profiles and persistent chat history.
+The static frontend is hosted on GitHub Pages. Telegram OIDC code exchange is currently prototyped as a Supabase Edge Function named `quick-function`. Supabase Postgres is the planned database for user profiles and persistent chat history. Cloudflare Worker remains an optional, undeployed AI-chat prototype.
 
 ## Planned architecture
 
 - GitHub Pages: static website.
 - Telegram: the only account sign-in method planned for SKEBOB AI.
-- Cloudflare Worker: exchanges Telegram authorization codes, validates Telegram ID-token signatures and claims, issues a signed application session token, and calls Workers AI.
+- Supabase Edge Function `quick-function`: exchanges Telegram authorization codes and validates Telegram ID-token signatures and claims.
+- A future trusted session layer: creates and validates app sessions and connects Telegram identities to Supabase user UUIDs.
 - Supabase Postgres: profiles and chat history, protected with Row Level Security (RLS).
 
 There will be no Google sign-in or email/password sign-in in this plan. Telegram user IDs must never be trusted just because the browser sends them; the backend validates Telegram's signed ID token before returning a profile.
 
 ## Current status
 
-- The Worker has a prototype chat endpoint and a Telegram OIDC code-exchange endpoint.
-- The OIDC exchange uses the registered redirect URI, PKCE verifier, nonce, Telegram JWKS signature verification, and issuer/audience/expiry checks.
-- The frontend has a Telegram sign-in button and a callback page, but both still need the deployed Worker URL configured.
-- The Worker is not deployed yet. Telegram credentials and session-signing secret are not configured.
-- The signed app session token is issued but is not yet used to protect chat requests or restore a session after a new browser session. Do not treat sign-in as production-ready.
-- supabase/schema.sql is a database foundation only; it has not been applied to a Supabase project.
+- The Supabase Edge Function `quick-function` has been deployed manually by the project owner; its deployed source has not been independently inspected in this repository.
+- The intended function flow exchanges Telegram authorization codes using the registered redirect URI and PKCE verifier, then validates the ID-token nonce, signature, issuer, and audience.
+- The GitHub Pages frontend and callback page now target the Supabase function. Replace the public-key placeholder in both files with the project's public anon/publishable key before testing.
+- The callback currently confirms Telegram identity only. It does not create a durable application session, write a profile to `app_users`, or grant authenticated access to the chat. Do not treat login as production-ready.
+- The Cloudflare Worker is not deployed. The existing Supabase schema was applied to the owner's project according to the owner's report, but its policies and grants still need review and testing.
 - The frontend does not yet connect to Supabase.
 - Chat history is not yet saved to Supabase.
 - Per-user quotas, media generation, PRO, credits, and payments are not implemented.
@@ -31,21 +31,15 @@ The BotFather configuration must include:
 - Redirect URI: `https://burovm079-dot.github.io/auth/callback/`
 - Client ID: the public Telegram OIDC client identifier for the bot.
 
-The frontend uses Authorization Code Flow with PKCE (S256). The callback checks the returned state against the browser's temporary session state. The Worker exchanges the authorization code server-side and validates the ID token using Telegram's published JWKS.
+The frontend uses Authorization Code Flow with PKCE (S256). The callback checks the returned state against the browser's temporary session state. The Supabase Edge Function exchanges the authorization code server-side and validates the ID token using Telegram's published JWKS.
 
-## Cloudflare Worker
+## Supabase Edge Function
 
-1. Deploy this folder as `skebob-ai-api` on Cloudflare Workers.
-2. Keep the AI binding configured in wrangler.toml.
-3. In Worker Variables, set:
-   - `ALLOWED_ORIGIN=https://burovm079-dot.github.io`
-   - `TELEGRAM_CLIENT_ID` to the Client ID shown by BotFather.
-   - `TELEGRAM_REDIRECT_URI=https://burovm079-dot.github.io/auth/callback/`
-4. Add these as encrypted Worker secrets, not ordinary public variables:
-   - `TELEGRAM_CLIENT_SECRET` — Client Secret from BotFather.
-   - `AUTH_SESSION_SECRET` — a newly generated, long random signing secret.
-5. After deployment, copy the Worker URL into `API_BASE_URL` in both `index.html` and `auth/callback/index.html`.
-6. Test the full login flow with a test account before enabling it for users.
+1. In Supabase Project Settings → API, copy only the public anon/publishable key.
+2. Replace `REPLACE_WITH_SUPABASE_PUBLISHABLE_OR_ANON_KEY` in `index.html` and `auth/callback/index.html` with that public key. Never use a `service_role` or secret key in browser code.
+3. Confirm the deployed `quick-function` has the server-side Telegram Client ID, Client Secret, and exact redirect URI configured as secrets.
+4. In BotFather, register the trusted origin `https://burovm079-dot.github.io` and redirect URI `https://burovm079-dot.github.io/auth/callback/`.
+5. Test only after checking the deployed function source and CORS settings. The callback currently verifies identity only; it does not create a persistent app session or save a profile.
 
 Do not paste Client Secret or AUTH_SESSION_SECRET into chat, GitHub, source files, screenshots, or browser code. If a secret is exposed, rotate it immediately.
 
