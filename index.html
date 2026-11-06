@@ -78,6 +78,8 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP';
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/auth/callback/';
+  // Set this to the deployed Cloudflare Worker URL before publishing the site.
+  const AI_API_URL = 'https://REPLACE_WITH_YOUR_WORKER_URL.workers.dev';
   const promptBox = document.querySelector('#prompt');
   const conversation = document.querySelector('#conversation');
   const welcome = document.querySelector('#welcome');
@@ -214,7 +216,48 @@
     addMessage(text, 'user');
     promptBox.value = '';
     promptBox.style.height = 'auto';
-    addMessage('AI-чат пока не подключён. Сначала завершим безопасный вход, затем подключим AI-провайдера.', 'assistant');
+
+    const sessionToken = sessionStorage.getItem('skebob_session_token');
+    if (!sessionToken) {
+      addMessage('Сначала войди через Telegram, чтобы пользоваться AI-чатом.', 'assistant');
+      return;
+    }
+    if (AI_API_URL.includes('REPLACE_WITH_YOUR_WORKER_URL')) {
+      addMessage('AI-сервер подготовлен. Осталось указать URL опубликованного Cloudflare Worker.', 'assistant');
+      return;
+    }
+
+    history.push({ role: 'user', content: text });
+    sending = true;
+    const sendButton = document.querySelector('#send');
+    sendButton.disabled = true;
+    sendButton.textContent = 'Думаю…';
+    try {
+      const response = await fetch(AI_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sessionToken },
+        body: JSON.stringify({ messages: history.slice(-12) })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401) {
+          sessionStorage.removeItem('skebob_session_token');
+          sessionStorage.removeItem('skebob_user');
+          showSignedOut();
+        }
+        throw new Error(data.error || 'Не удалось получить ответ от AI.');
+      }
+      if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('AI вернул пустой ответ. Попробуй ещё раз.');
+      history.push({ role: 'assistant', content: data.reply });
+      addMessage(data.reply, 'assistant');
+    } catch (error) {
+      addMessage(error instanceof Error ? error.message : 'Не удалось связаться с AI-сервером.', 'assistant');
+    } finally {
+      sending = false;
+      sendButton.disabled = false;
+      sendButton.textContent = 'Отправить ↑';
+      promptBox.focus();
+    }
   }
 
   document.querySelector('#send').addEventListener('click', () => send());
