@@ -4,7 +4,9 @@ compatibility_date = "2026-11-06"
 
 [vars]
 ALLOWED_ORIGIN = "https://burovm079-dot.github.io"
-OPENAI_MODEL = "gpt-5.5"
+
+[ai]
+binding = "AI"
 
 [[ratelimits]]
 name = "RATE_LIMITER"
