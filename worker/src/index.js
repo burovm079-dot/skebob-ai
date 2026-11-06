@@ -91,7 +91,7 @@ export default {
     }
 
     try {
-      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
+      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
         messages, max_tokens: 900, temperature: 0.6
       });
       const reply = typeof result?.response === "string" ? result.response.trim() : "";
