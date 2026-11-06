@@ -80,7 +80,8 @@
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/skebob-ai/auth/callback/';
   // Local AI: the model runs in the visitor's browser via WebLLM. No paid API key is used.
-  const WEBLLM_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC';
+  const WEBLLM_MODEL_ID = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
+  const WEBLLM_FALLBACK_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC';
   let aiEngine = null;
   let aiEnginePromise = null;
   const promptBox = document.querySelector('#prompt');
@@ -416,16 +417,32 @@
       throw new Error('В этом браузере нет WebGPU. Попробуй обновлённый Chrome или Edge на устройстве с поддерживаемой графикой.');
     }
     aiEnginePromise = (async () => {
-      statusBubble.textContent = 'Загружаю движок Skebob AI…';
+      statusBubble.textContent = 'Загружаю улучшенную модель Skebob AI…';
       const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-      const engine = await webllm.CreateMLCEngine(WEBLLM_MODEL_ID, {
-        initProgressCallback: (report) => {
-          const text = typeof report?.text === 'string' ? report.text : 'Подготавливаю локальную модель…';
-          statusBubble.textContent = text;
+      const progress = (report) => {
+        const text = typeof report?.text === 'string' ? report.text : 'Подготавливаю локальную модель…';
+        statusBubble.textContent = text;
+      };
+      try {
+        const engine = await webllm.CreateMLCEngine(WEBLLM_MODEL_ID, {
+          initProgressCallback: progress
+        });
+        statusBubble.textContent = 'Улучшенная модель готова.';
+        aiEngine = engine;
+        return engine;
+      } catch (primaryError) {
+        statusBubble.textContent = 'Большая модель не запустилась. Пробую облегчённую…';
+        try {
+          const engine = await webllm.CreateMLCEngine(WEBLLM_FALLBACK_MODEL_ID, {
+            initProgressCallback: progress
+          });
+          statusBubble.textContent = 'Запущена облегчённая модель.';
+          aiEngine = engine;
+          return engine;
+        } catch (fallbackError) {
+          throw new Error('Не удалось запустить локальную модель. ' + (fallbackError?.message || primaryError?.message || 'Проверь поддержку WebGPU и свободную память устройства.'));
         }
-      });
-      aiEngine = engine;
-      return engine;
+      }
     })();
     try {
       return await aiEnginePromise;
