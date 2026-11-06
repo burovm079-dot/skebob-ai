@@ -52,7 +52,7 @@
     </div>
   </aside>
   <main>
-    <header class="topbar"><div class="model">Модель: <b>Skebob AI</b>　⌄</div><div class="top-actions"><button id="telegramLogin">Войти через Telegram</button><button id="share">↗ Поделиться</button><button>Обновить план ✦</button></div></header>
+    <header class="topbar"><div class="model">Модель: <b>Skebob AI</b>　⌄</div><div class="top-actions"><button id="openBrowser" hidden>↗ Открыть в браузере</button><button id="telegramLogin">Войти через Telegram</button><button id="share">↗ Поделиться</button><button>Обновить план ✦</button></div></header>
     <section class="workspace">
       <div class="welcome" id="welcome">
         <div class="spark">✳</div>
@@ -79,6 +79,7 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP';
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/skebob-ai/auth/callback/';
+  const PUBLIC_APP_URL = 'https://burovm079-dot.github.io/skebob-ai/';
   // Local AI: the model runs in the visitor's browser via WebLLM. No paid API key is used.
   const WEBLLM_MODEL_ID = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
   const WEBLLM_FALLBACK_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC';
@@ -372,6 +373,28 @@
       sessionStorage.removeItem('skebob_user');
       showSignedOut();
     }
+  }
+
+  // В Telegram Mini App предлагаем открыть тот же сайт во внешнем браузере,
+  // где поддержка WebGPU обычно полнее.
+  const openBrowserButton = document.querySelector('#openBrowser');
+  const telegramWebApp = window.Telegram?.WebApp;
+  if (telegramWebApp?.initData) {
+    openBrowserButton.hidden = false;
+    openBrowserButton.addEventListener('click', () => {
+      try {
+        if (typeof telegramWebApp.openLink === 'function') {
+          telegramWebApp.openLink(PUBLIC_APP_URL);
+          return;
+        }
+      } catch (error) {
+        console.warn('Telegram openLink failed:', error);
+      }
+      const opened = window.open(PUBLIC_APP_URL, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        alert('Открой Skebob AI в браузере по адресу: ' + PUBLIC_APP_URL);
+      }
+    });
   }
 
   document.querySelector('#telegramLogin').addEventListener('click', () => {
