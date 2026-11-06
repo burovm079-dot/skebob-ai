@@ -39,19 +39,8 @@ export default {
       return json({ error: "Method not allowed" }, 405, allowedOrigin);
     }
 
-    if (!env.OPENAI_API_KEY) {
-      return json({ error: "Сервер пока не настроен." }, 503, allowedOrigin);
-    }
-
-    // Fail closed: do not serve a public paid API without the rate-limit binding.
-    if (!env.RATE_LIMITER || typeof env.RATE_LIMITER.limit !== "function") {
-      return json({ error: "Защита от частых запросов ещё не настроена." }, 503, allowedOrigin);
-    }
-
-    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
-    const rate = await env.RATE_LIMITER.limit({ key: clientIp });
-    if (!rate.success) {
-      return json({ error: "Слишком много запросов. Подожди минуту и попробуй снова." }, 429, allowedOrigin);
+    if (!env.AI || typeof env.AI.run !== "function") {
+      return json({ error: "Бесплатная AI-модель ещё не подключена в Cloudflare." }, 503, allowedOrigin);
     }
 
     let body;
@@ -69,7 +58,11 @@ export default {
       return json({ error: "Некорректная история чата." }, 400, allowedOrigin);
     }
 
-    const messages = [];
+    const messages = [{
+      role: "system",
+      content: "Ты — Skebob AI, полезный, дружелюбный и безопасный AI-ассистент. Отвечай на языке пользователя. Если не уверен — честно скажи об этом."
+    }];
+
     for (const item of body.messages) {
       if (!item || !["user", "assistant"].includes(item.role) ||
           typeof item.content !== "string" || item.content.length < 1 ||
@@ -84,43 +77,22 @@ export default {
     }
 
     try {
-      const upstream = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: env.OPENAI_MODEL || "gpt-5.5",
-          instructions: "Ты — Skebob AI, полезный, дружелюбный и безопасный AI-ассистент. Отвечай на языке пользователя. Если не уверен — честно скажи об этом.",
-          input: messages,
-          max_output_tokens: 1000,
-          store: false
-        })
+      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
+        messages,
+        max_tokens: 900,
+        temperature: 0.6
       });
 
-      const result = await upstream.json().catch(() => ({}));
-      if (!upstream.ok) {
-        console.error("OpenAI API request failed:", upstream.status, result?.error?.code || "unknown_error");
-        return json({ error: "AI-сервис временно недоступен. Попробуй позже." }, 502, allowedOrigin);
-      }
-
-      const reply = Array.isArray(result.output)
-        ? result.output
-            .flatMap(item => Array.isArray(item.content) ? item.content : [])
-            .filter(part => part.type === "output_text" && typeof part.text === "string")
-            .map(part => part.text)
-            .join("\n")
-            .trim()
-        : "";
+      const reply = typeof result?.response === "string" ? result.response.trim() : "";
       if (!reply) {
+        console.error("Workers AI returned an empty response");
         return json({ error: "AI не вернул текстовый ответ. Попробуй ещё раз." }, 502, allowedOrigin);
       }
 
       return json({ reply }, 200, allowedOrigin);
     } catch (error) {
-      console.error("Chat request failed:", error?.name || "unknown_error");
-      return json({ error: "Не удалось связаться с AI-сервисом." }, 502, allowedOrigin);
+      console.error("Workers AI request failed:", error?.name || "unknown_error");
+      return json({ error: "Бесплатный лимит AI мог закончиться или модель временно недоступна. Попробуй позже." }, 503, allowedOrigin);
     }
   }
 };
