@@ -263,12 +263,7 @@
     promptBox.value = '';
     promptBox.style.height = 'auto';
 
-    const sessionToken = sessionStorage.getItem('skebob_session_token');
-    if (!sessionToken) {
-      addMessage('Сначала войди через Telegram, чтобы пользоваться AI-чатом.', 'assistant');
-      return;
-    }
-
+    // Локальный ИИ доступен без входа в Telegram.
     sending = true;
     const sendButton = document.querySelector('#send');
     sendButton.disabled = true;
