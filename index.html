@@ -146,41 +146,9 @@
     welcome.style.display = 'none';
     conversation.style.display = 'flex';
     addMessage(text, 'user');
-    history.push({ role: 'user', content: text });
     promptBox.value = '';
     promptBox.style.height = 'auto';
-
-    addMessage('AI-чат пока не подключён к серверу. Сначала завершим безопасную авторизацию и подключение AI-провайдера.', 'assistant');
-      history.pop();
-      return;
-    }
-
-    return;
-
-    sending = true;
-    const sendButton = document.querySelector('#send');
-    sendButton.disabled = true;
-    sendButton.textContent = 'Думаю…';
-    try {
-      const response = await fetch(API_BASE_URL.replace(/\/$/, '') + '/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history.slice(-12) })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Не удалось получить ответ от сервера.');
-      if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Сервер вернул пустой ответ.');
-      history.push({ role: 'assistant', content: data.reply });
-      addMessage(data.reply, 'assistant');
-    } catch (error) {
-      history.pop();
-      addMessage(error.message || 'Произошла ошибка. Попробуй ещё раз позже.', 'assistant');
-    } finally {
-      sending = false;
-      sendButton.disabled = false;
-      sendButton.textContent = 'Отправить ↑';
-      promptBox.focus();
-    }
+    addMessage('AI-чат пока не подключён. Сначала завершим безопасный вход, затем подключим AI-провайдера.', 'assistant');
   }
 
   document.querySelector('#send').addEventListener('click', () => send());
