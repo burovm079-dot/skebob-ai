@@ -73,8 +73,9 @@
   </main>
 </div>
 <script>
-  // Заполним адрес после публикации Cloudflare Worker.
-  const API_BASE_URL = '';
+  // Supabase Edge Function endpoint. The anon/publishable key is public; never use a service_role key here.
+  const SUPABASE_FUNCTION_URL = 'https://krhjrhuejzhpaeukdimu.supabase.co/functions/v1/quick-function';
+  const SUPABASE_ANON_KEY = 'REPLACE_WITH_SUPABASE_PUBLISHABLE_OR_ANON_KEY';
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/auth/callback/';
   const promptBox = document.querySelector('#prompt');
@@ -91,15 +92,15 @@
   }
 
   async function startTelegramLogin() {
-    if (!API_BASE_URL) {
-      alert('Сервер авторизации ещё не опубликован. Сначала настроим Cloudflare Worker.');
+    if (SUPABASE_ANON_KEY.startsWith('REPLACE_')) {
+      alert('Нужно добавить публичный Supabase anon/publishable key в настройки сайта. Не используй service_role или secret key.');
       return;
     }
     const state = randomBase64Url(32);
     const nonce = randomBase64Url(32);
     const verifier = randomBase64Url(64);
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-    const challenge = randomBase64Url(0) || (() => {
+    const challenge = (() => {
       const bytes = new Uint8Array(digest);
       let binary = '';
       bytes.forEach(byte => binary += String.fromCharCode(byte));
@@ -149,11 +150,12 @@
     promptBox.value = '';
     promptBox.style.height = 'auto';
 
-    if (!API_BASE_URL) {
-      addMessage('Чат уже подготовлен к подключению, но сервер ещё не опубликован. После настройки Cloudflare Worker сюда будет подключена настоящая модель.', 'assistant');
+    addMessage('AI-чат пока не подключён к серверу. Сначала завершим безопасную авторизацию и подключение AI-провайдера.', 'assistant');
       history.pop();
       return;
     }
+
+    return;
 
     sending = true;
     const sendButton = document.querySelector('#send');
