@@ -54,14 +54,13 @@ export default {
       return json({ error: "Слишком много запросов. Подожди минуту и попробуй снова." }, 429, allowedOrigin);
     }
 
-    const contentLength = Number(request.headers.get("Content-Length") || 0);
-    if (contentLength > 24000) {
-      return json({ error: "Сообщение слишком большое." }, 413, allowedOrigin);
-    }
-
     let body;
     try {
-      body = await request.json();
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).byteLength > 24000) {
+        return json({ error: "Сообщение слишком большое." }, 413, allowedOrigin);
+      }
+      body = JSON.parse(rawBody);
     } catch {
       return json({ error: "Некорректный формат запроса." }, 400, allowedOrigin);
     }
@@ -106,7 +105,14 @@ export default {
         return json({ error: "AI-сервис временно недоступен. Попробуй позже." }, 502, allowedOrigin);
       }
 
-      const reply = typeof result.output_text === "string" ? result.output_text.trim() : "";
+      const reply = Array.isArray(result.output)
+        ? result.output
+            .flatMap(item => Array.isArray(item.content) ? item.content : [])
+            .filter(part => part.type === "output_text" && typeof part.text === "string")
+            .map(part => part.text)
+            .join("\n")
+            .trim()
+        : "";
       if (!reply) {
         return json({ error: "AI не вернул текстовый ответ. Попробуй ещё раз." }, 502, allowedOrigin);
       }
