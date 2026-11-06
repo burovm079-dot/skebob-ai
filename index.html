@@ -78,8 +78,9 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_4XLmIH-wG_gaakmLxuAqkg_U-Gc9ULP';
   const TELEGRAM_CLIENT_ID = '9148855115';
   const REDIRECT_URI = 'https://burovm079-dot.github.io/auth/callback/';
-  // Set this to the deployed Cloudflare Worker URL before publishing the site.
-  const AI_API_URL = 'https://REPLACE_WITH_YOUR_WORKER_URL.workers.dev';
+  // Set this to the exact workers.dev URL after deploying the Worker.
+  // Keep empty until deployment; the UI will explain that setup is still pending.
+  const AI_API_URL = '';
   const promptBox = document.querySelector('#prompt');
   const conversation = document.querySelector('#conversation');
   const welcome = document.querySelector('#welcome');
@@ -222,7 +223,7 @@
       addMessage('Сначала войди через Telegram, чтобы пользоваться AI-чатом.', 'assistant');
       return;
     }
-    if (AI_API_URL.includes('REPLACE_WITH_YOUR_WORKER_URL')) {
+    if (!AI_API_URL || !/^https:\/\/[a-z0-9-]+\.([a-z0-9-]+\.)?workers\.dev\/?$/i.test(AI_API_URL)) {
       addMessage('AI-сервер подготовлен. Осталось указать URL опубликованного Cloudflare Worker.', 'assistant');
       return;
     }
