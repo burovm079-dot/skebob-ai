@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b0d12" />
+  <script src="https://telegram.org/js/telegram-web-app.js?64"></script>
   <title>Skebob AI — Your creative workspace</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
@@ -96,6 +97,22 @@
   }
 
   async function startTelegramLogin() {
+    const telegramApp = window.Telegram?.WebApp;
+    if (telegramApp?.initData) {
+      try {
+        telegramApp.ready();
+        telegramApp.expand();
+        const data = await authRequest({ action: 'miniapp-login', init_data: telegramApp.initData });
+        if (!data.authenticated || !data.session_token || !data.user) throw new Error('Telegram не подтвердил вход.');
+        sessionStorage.setItem('skebob_session_token', data.session_token);
+        sessionStorage.setItem('skebob_user', JSON.stringify(data.user));
+        showSignedIn(data.user);
+        return;
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Не удалось войти через Telegram Mini App.');
+        return;
+      }
+    }
     if (SUPABASE_ANON_KEY.startsWith('REPLACE_')) {
       alert('Нужно добавить публичный Supabase anon/publishable key в настройки сайта. Не используй service_role или secret key.');
       return;
