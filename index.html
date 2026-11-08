@@ -67,7 +67,7 @@
       </div>
       <div class="conversation" id="conversation" aria-live="polite"></div>
       <div class="composer-wrap"><div class="composer">
-        <textarea id="prompt" rows="2" placeholder="Спроси о чём угодно..."></textarea>
+        <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.html,.css,.js,.py,.xml" hidden />\n        <div id="attachmentStatus" style="display:none;color:#9ee5d6;font-size:11px;padding:2px 6px 7px"></div>\n        <textarea id="prompt" rows="2" placeholder="Спроси о чём угодно..."></textarea>
         <div class="composer-tools"><div class="toolset"><button id="attach">＋ Прикрепить</button><button id="mode">✧ Режим: обычный</button></div><button class="send" id="send">Отправить ↑</button></div>
       </div><p class="hint">Skebob AI может ошибаться. Проверяй важную информацию.</p></div>
     </section>
@@ -92,7 +92,7 @@
   const CHAT_STORAGE_KEY = 'skebob_local_chat_v1';
   const chats = [];
   let activeChatId = null;
-  let sending = false;
+  let sending = false;\n  let reasoningMode = false;\n  let attachedContext = '';
 
   function activeChat() {
     return chats.find(chat => chat.id === activeChatId) || null;
@@ -489,7 +489,7 @@
     sendButton.disabled = true;
     sendButton.textContent = 'Думаю…';
     const statusBubble = addMessage('Запускаю локальный ИИ. При первом запуске модель нужно загрузить — это может занять некоторое время.', 'assistant');
-    history.push({ role: 'user', content: text });
+    const messageForModel = attachedContext\n      ? text + '\\n\\nМатериалы пользователя:\\n' + attachedContext\n      : text;\n    history.push({ role: 'user', content: messageForModel });\n    attachedContext = '';\n    const attachmentStatus = document.querySelector('#attachmentStatus');\n    attachmentStatus.textContent = '';\n    attachmentStatus.style.display = 'none';
     const currentChat = activeChat();
     if (currentChat && currentChat.messages.length === 0) {
       currentChat.title = text.replace(/\s+/g, ' ').slice(0, 38) || 'Новый чат';
