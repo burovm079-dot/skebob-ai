@@ -67,7 +67,9 @@
       </div>
       <div class="conversation" id="conversation" aria-live="polite"></div>
       <div class="composer-wrap"><div class="composer">
-        <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.html,.css,.js,.py,.xml" hidden />\n        <div id="attachmentStatus" style="display:none;color:#9ee5d6;font-size:11px;padding:2px 6px 7px"></div>\n        <textarea id="prompt" rows="2" placeholder="Спроси о чём угодно..."></textarea>
+        <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.html,.css,.js,.py,.xml" hidden />
+        <div id="attachmentStatus" style="display:none;color:#9ee5d6;font-size:11px;padding:2px 6px 7px"></div>
+        <textarea id="prompt" rows="2" placeholder="Спроси о чём угодно..."></textarea>
         <div class="composer-tools"><div class="toolset"><button id="attach">＋ Прикрепить</button><button id="mode">✧ Режим: обычный</button></div><button class="send" id="send">Отправить ↑</button></div>
       </div><p class="hint">Skebob AI может ошибаться. Проверяй важную информацию.</p></div>
     </section>
@@ -92,7 +94,9 @@
   const CHAT_STORAGE_KEY = 'skebob_local_chat_v1';
   const chats = [];
   let activeChatId = null;
-  let sending = false;\n  let reasoningMode = false;\n  let attachedContext = '';
+  let sending = false;
+  let reasoningMode = false;
+  let attachedContext = '';\n  let reasoningMode = false;\n  let attachedContext = '';
 
   function activeChat() {
     return chats.find(chat => chat.id === activeChatId) || null;
@@ -515,8 +519,8 @@
           ].join('\\n') },
           ...history.slice(-12)
         ],
-        temperature: 0.65,
-        max_tokens: 768,
+        temperature: reasoningMode ? 0.35 : 0.65,
+        max_tokens: reasoningMode ? 1200 : 768,
         stream: true
       });
       let reply = '';
@@ -560,13 +564,39 @@
   );
   document.querySelector('#newChat').addEventListener('click', createChat);
   document.querySelector('#mode').addEventListener('click', e => {
-    e.currentTarget.textContent = e.currentTarget.textContent.includes('обычный')
-      ? '✧ Режим: рассуждение'
-      : '✧ Режим: обычный';
+    reasoningMode = !reasoningMode;
+    e.currentTarget.textContent = reasoningMode ? '✧ Режим: подробный' : '✧ Режим: обычный';
+    e.currentTarget.setAttribute('aria-pressed', String(reasoningMode));
   });
-  document.querySelector('#attach').addEventListener('click', () =>
-    alert('Загрузка файлов появится на следующем этапе.')
-  );
+  const fileInput = document.querySelector('#fileInput');
+  document.querySelector('#attach').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const status = document.querySelector('#attachmentStatus');
+    const allowed = /\.(txt|md|csv|json|html|css|js|py|xml)$/i.test(file.name);
+    if (!allowed) {
+      alert('Пока поддерживаются текстовые файлы: TXT, MD, CSV, JSON, HTML, CSS, JS, PY и XML.');
+      fileInput.value = '';
+      return;
+    }
+    if (file.size > 100 * 1024) {
+      alert('Файл слишком большой. Максимальный размер — 100 КБ.');
+      fileInput.value = '';
+      return;
+    }
+    try {
+      const content = await file.text();
+      if (!content.trim()) throw new Error('Файл пустой.');
+      attachedContext = 'Файл: ' + file.name + '\n' + content.slice(0, 100000);
+      status.textContent = 'Прикреплён: ' + file.name + ' · ' + Math.ceil(file.size / 1024) + ' КБ';
+      status.style.display = 'block';
+    } catch (error) {
+      alert(error.message || 'Не удалось прочитать файл.');
+    } finally {
+      fileInput.value = '';
+    }
+  });
   document.querySelector('#share').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(location.href);
