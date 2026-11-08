@@ -83,8 +83,12 @@
   const REDIRECT_URI = 'https://burovm079-dot.github.io/skebob-ai/auth/callback/';
   const PUBLIC_APP_URL = 'https://burovm079-dot.github.io/skebob-ai/';
   // Local AI: the model runs in the visitor's browser via WebLLM. No paid API key is used.
-  const WEBLLM_MODEL_ID = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
-  const WEBLLM_FALLBACK_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC';
+  // Сначала пробуем более сильную модель 3B; если устройство не потянет — автоматически откатываемся.
+  const WEBLLM_MODEL_ID = 'Qwen2.5-3B-Instruct-q4f16_1-MLC';
+  const WEBLLM_FALLBACK_MODEL_IDS = [
+    'Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
+    'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
+  ];
   let aiEngine = null;
   let aiEnginePromise = null;
   const promptBox = document.querySelector('#prompt');
@@ -96,7 +100,7 @@
   let activeChatId = null;
   let sending = false;
   let reasoningMode = false;
-  let attachedContext = '';\n  let reasoningMode = false;\n  let attachedContext = '';
+  let attachedContext = '';
 
   function activeChat() {
     return chats.find(chat => chat.id === activeChatId) || null;
@@ -458,17 +462,17 @@
         aiEngine = engine;
         return engine;
       } catch (primaryError) {
-        statusBubble.textContent = 'Большая модель не запустилась. Пробую облегчённую…';
-        try {
-          const engine = await webllm.CreateMLCEngine(WEBLLM_FALLBACK_MODEL_ID, {
-            initProgressCallback: progress
-          });
-          statusBubble.textContent = 'Запущена облегчённая модель.';
-          aiEngine = engine;
-          return engine;
-        } catch (fallbackError) {
-          throw new Error('Не удалось запустить локальную модель. ' + (fallbackError?.message || primaryError?.message || 'Проверь поддержку WebGPU и свободную память устройства.'));
+        let lastError = primaryError;
+        for (const fallbackModelId of WEBLLM_FALLBACK_MODEL_IDS) {
+          try {
+            statusBubble.textContent = 'Модель 3B не запустилась. Пробую ' + fallbackModelId + '…';
+            const engine = await webllm.CreateMLCEngine(fallbackModelId, { initProgressCallback: progress });
+            statusBubble.textContent = 'Запущена совместимая модель: ' + fallbackModelId;
+            aiEngine = engine;
+            return engine;
+          } catch (fallbackError) { lastError = fallbackError; }
         }
+        throw new Error('Не удалось запустить локальный ИИ. ' + (lastError?.message || 'Проверь поддержку WebGPU и свободную память устройства.'));
       }
     })();
     try {
@@ -493,7 +497,14 @@
     sendButton.disabled = true;
     sendButton.textContent = 'Думаю…';
     const statusBubble = addMessage('Запускаю локальный ИИ. При первом запуске модель нужно загрузить — это может занять некоторое время.', 'assistant');
-    const messageForModel = attachedContext\n      ? text + '\\n\\nМатериалы пользователя:\\n' + attachedContext\n      : text;\n    history.push({ role: 'user', content: messageForModel });\n    attachedContext = '';\n    const attachmentStatus = document.querySelector('#attachmentStatus');\n    attachmentStatus.textContent = '';\n    attachmentStatus.style.display = 'none';
+    const messageForModel = attachedContext
+      ? text + '\n\nМатериалы пользователя:\n' + attachedContext
+      : text;
+    history.push({ role: 'user', content: messageForModel });
+    attachedContext = '';
+    const attachmentStatus = document.querySelector('#attachmentStatus');
+    attachmentStatus.textContent = '';
+    attachmentStatus.style.display = 'none';
     const currentChat = activeChat();
     if (currentChat && currentChat.messages.length === 0) {
       currentChat.title = text.replace(/\s+/g, ' ').slice(0, 38) || 'Новый чат';
@@ -517,10 +528,12 @@
             'Если пользователь просит текущую информацию, к которой у тебя нет доступа, предупреди, что не можешь проверить её в реальном времени.',
             'Главная цель — дать честный, понятный и применимый ответ, а не просто звучать уверенно.'
           ].join('\\n') },
-          ...history.slice(-12)
+          ...history.slice(-14)
         ],
-        temperature: reasoningMode ? 0.35 : 0.65,
-        max_tokens: reasoningMode ? 1200 : 768,
+        temperature: reasoningMode ? 0.3 : 0.55,
+        top_p: 0.9,
+        repetition_penalty: 1.08,
+        max_tokens: reasoningMode ? 1600 : 900,
         stream: true
       });
       let reply = '';
